@@ -1,0 +1,18 @@
+#Snakemake configuration file
+
+#Specify paths to data files
+
+#Paths must end with forward slash
+
+#project directory
+dir_proj: "/project2/nobrega/grace/metabolic_traits_GWAS/"
+
+tmp: "/scratch/midway2/gthansen/metabolic_traits_GWAS/"
+
+#scripts location
+scripts: "/project2/nobrega/grace/metabolic_traits_GWAS/scripts/"
+
+conda: "/project2/nobrega/grace/conda/ldsc-env.yaml"
+
+#text file with name of each sample
+prefixes: "prefixes_jobs_sex_noraw"

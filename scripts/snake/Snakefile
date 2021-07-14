@@ -1,0 +1,107 @@
+#Snakefile
+#
+#This file will process promoter capture HiC data from fastq files to CHiCAGO-created ibed and washU-visualizable files.
+#To configure the paths to data files and other settings, edit
+#config.yaml
+#
+#to configure job submission settings for cluster, edit
+#cluster.json and submit.snakemake.sh
+
+#to run on RCC gardner use 'scripts/snake/snakemake.batch'
+import glob
+import os
+from snakemake.utils import R
+
+#Configuration -------------------------------------
+
+configfile: "/project2/nobrega/grace/metabolic_traits_GWAS/scripts/snake/config.yaml"
+workdir: config["dir_proj"]
+env=config["conda"]
+
+#Paths for data (end with forward slash)
+dir_proj= config["dir_proj"]
+scripts=config["scripts"]
+
+#Paths for files:
+out= dir_proj
+logs= dir_proj + "log/"
+tmp= config["tmp"]
+
+#Environment for ldsc:
+conda=config["conda"]
+
+#File identifiers
+prefixes = [line.strip() for line in open(dir_proj+config["prefixes"],'r')]
+
+assert os.path.exists(dir_proj), "Project directory exists"
+
+#Directory to send log files. Needs to be created manually since it
+#is not a file created by a Snakemake rule.
+if not os.path.isdir(tmp):
+     os.mkdir(tmp)
+if not os.path.isdir(logs):
+     os.mkdir(logs)
+
+#Rules -------------------------------------
+
+localrules: download_sumstat, delete_sumstat
+
+rule all: #Here we tell snakemake everything that we want to be made
+	input:
+		expand(out+"{prefix}_done",prefix=prefixes)
+
+rule download_sumstat:
+	input:
+		manifest=dir_proj+"UKBB_GWAS_Imputed_v3_File_Manifest_Release_20180731.txt"
+	resources:
+		load=50
+	output:
+		tmp+"{prefix}.both_sexes.tsv.bgz",
+		tmp+"{prefix}.female.tsv.bgz",
+		tmp+"{prefix}.male.tsv.bgz"
+	shell:
+		scripts+"download_sumstat.sh {wildcards.prefix} {tmp}"
+
+rule get_variants:
+	input:
+		tmp+"{prefix}.both_sexes.tsv.bgz",
+		tmp+"{prefix}.female.tsv.bgz",
+		tmp+"{prefix}.male.tsv.bgz"
+	output:
+		out+"pvals/{prefix}.both_sexes_WHR_F.txt",
+		out+"pvals/{prefix}.female_WHR_F.txt",
+		out+"pvals/{prefix}.male_WHR_F.txt"
+	shell:
+		"python2 "+scripts+"get_UKBB_WHR_pvals.py {wildcards.prefix}"
+
+rule munge_sumstats:
+	input:
+		tmp+"{prefix}.both_sexes.tsv.bgz",
+		tmp+"{prefix}.female.tsv.bgz",
+		tmp+"{prefix}.male.tsv.bgz"
+	output:
+		out+"genetic_correlation/WHR/WHR_{prefix}_corr.log",
+		out+"genetic_correlation/WHR/WHR_F_{prefix}_corr.log",
+		out+"genetic_correlation/WHR/WHR_M_{prefix}_corr.log",
+		out+"genetic_correlation/sex/sex_{prefix}_corr.log"
+	shell:
+		"/project2/nobrega/grace/conda/ldsc-env/bin/python2 "+scripts+"munge_UKBB.py {wildcards.prefix}"
+	conda:
+		"{conda}"
+
+rule delete_sumstat:
+	input:
+		out+"pvals/{prefix}.both_sexes_WHR_F.txt",
+		out+"pvals/{prefix}.female_WHR_F.txt",
+		out+"pvals/{prefix}.male_WHR_F.txt",
+		out+"genetic_correlation/WHR/WHR_{prefix}_corr.log",
+		out+"genetic_correlation/WHR/WHR_F_{prefix}_corr.log",
+		out+"genetic_correlation/WHR/WHR_M_{prefix}_corr.log",
+		out+"genetic_correlation/sex/sex_{prefix}_corr.log"
+	output:
+		out+"{prefix}_done"
+	priority:
+		10
+	shell:
+		'touch {out}{wildcards.prefix}_done'
+
